@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Block Blast: Impossibility Proof</title>
+    <title>Block Blast: Challange</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
@@ -181,13 +181,13 @@
         </div>
         
         <button onclick="startGame('easy')" class="w-64 p-4 bg-green-500 rounded-xl font-bold text-xl shadow-lg hover:bg-green-600 transition">
-            EASY MODE
-            <div class="text-xs font-normal opacity-75 mt-1">Smart AI gives you winning pieces.</div>
+            Ga Pernah Kalah
+            <div class="text-xs font-normal opacity-75 mt-1">EZ, auto win</div>
         </button>
 
         <button onclick="startGame('hard')" class="w-64 p-4 bg-red-600 rounded-xl font-bold text-xl shadow-lg hover:bg-red-700 transition">
-            IMPOSSIBLE MODE
-            <div class="text-xs font-normal opacity-75 mt-1">Forced loss at move 45+.</div>
+            Shopee Blockzi
+            <div class="text-xs font-normal opacity-75 mt-1">Pure Scam</div>
         </button>
     </div>
 
@@ -207,7 +207,6 @@
         let difficulty = 'easy';
         let currentShapes = [null, null, null];
         
-        // Shape Definitions (Base Orientations)
         const SHAPES = {
             dot: [[1]],
             
@@ -235,8 +234,6 @@
             sq3: 'c-1', t3: 'c-5', z3: 'c-4', s3: 'c-4',
             l3r: 'c-6'
         };
-
-        // --- Core Init ---
 
         function initGrid() {
             grid = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
@@ -273,7 +270,7 @@
              document.getElementById('menu-overlay').classList.remove('hidden');
         });
 
-        // --- Intelligent Spawning Logic ---
+        // --- Logic Engine ---
 
         function spawnShapes() {
             const dock = document.getElementById('dock');
@@ -281,19 +278,16 @@
             currentShapes = [];
 
             for (let i = 0; i < 3; i++) {
+                // Get AI decision
                 let shapeData = getSmartShape();
                 let shapeKey = shapeData.key;
                 let shapeMatrix = shapeData.matrix;
                 
-                // If it's hard mode < 45 or easy mode, we might rotate randoms
-                // But for "Impossible" mode, we want the specific orientation that failed
-                if (difficulty === 'easy' || (difficulty === 'hard' && moves < 45)) {
-                    // Random rotations for variety unless it's a specific needed piece
-                    if (!shapeData.fixed) {
-                        const rotations = Math.floor(Math.random() * 4);
-                        for(let r=0; r<rotations; r++) {
-                            shapeMatrix = rotateMatrix(shapeMatrix);
-                        }
+                // If logic didn't lock the rotation, randomise it now
+                if (!shapeData.fixed) {
+                    const rotations = Math.floor(Math.random() * 4);
+                    for(let r=0; r<rotations; r++) {
+                        shapeMatrix = rotateMatrix(shapeMatrix);
                     }
                 }
 
@@ -320,92 +314,105 @@
             }
         }
 
-        // --- Easy Mode AI: "The Helper" ---
+        // --- Easy Mode AI ---
         function getEasyModeShape() {
-            // 1. Scan for "Almost Complete" lines
-            // We look for rows/cols with 6 or 7 filled blocks (gaps of 2 or 1)
+            let filledCount = 0;
+            for(let r=0; r<BOARD_SIZE; r++) {
+                for(let c=0; c<BOARD_SIZE; c++) {
+                    if(grid[r][c] === 1) filledCount++;
+                }
+            }
+            const density = filledCount / (BOARD_SIZE * BOARD_SIZE);
+
+            // 1. High Density (Dangerous): Find a fit
+            if (density > 0.6) {
+                // Try to clear gaps
+                const gapShape = findGapShape();
+                if (gapShape) return gapShape;
+
+                // Pick small pieces and ensure they fit exactly as rotated
+                const smallKeys = ['dot', 'bar2', 'l2'];
+                for(let i=0; i<10; i++) {
+                    const k = smallKeys[Math.floor(Math.random() * smallKeys.length)];
+                    let m = SHAPES[k];
+                    // Find a valid rotation
+                    for(let r=0; r<4; r++) {
+                        if(canShapeFitAnywhere(m)) return { key: k, matrix: m, fixed: true };
+                        m = rotateMatrix(m);
+                    }
+                }
+                return { key: 'dot', matrix: SHAPES['dot'], fixed: true };
+            }
+
+            // 2. Normal Play: Random pieces that fit
+            const allKeys = Object.keys(SHAPES);
+            for(let i=0; i<10; i++) {
+                const k = allKeys[Math.floor(Math.random() * allKeys.length)];
+                let m = SHAPES[k];
+                // Randomize rotation for variety, but check if it fits
+                const randRot = Math.floor(Math.random()*4);
+                for(let r=0; r<randRot; r++) m = rotateMatrix(m);
+                
+                // If this specific random rotation fits, return it fixed
+                if (canShapeFitAnywhere(m)) {
+                    return { key: k, matrix: m, fixed: true };
+                }
+                // If not, try rotating it until it fits
+                for(let r=0; r<3; r++) {
+                    m = rotateMatrix(m);
+                    if(canShapeFitAnywhere(m)) return { key: k, matrix: m, fixed: true };
+                }
+            }
             
-            // Check Rows
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                let zeros = 0;
-                let contiguous = 0; 
-                // Simple gap check (not perfect contiguous logic, but good enough for heuristics)
-                for(let c=0; c<BOARD_SIZE; c++) if(grid[r][c] === 0) zeros++;
-                
-                if (zeros === 1) return { key: 'dot', matrix: SHAPES['dot'], fixed: true };
-                if (zeros === 2) {
-                    // 50% chance to give the helper piece
-                    if(Math.random() > 0.3) return { key: 'bar2', matrix: SHAPES['bar2'], fixed: false };
-                }
-            }
-
-            // Check Cols (Same logic)
-            for (let c = 0; c < BOARD_SIZE; c++) {
-                let zeros = 0;
-                for(let r=0; r<BOARD_SIZE; r++) if(grid[r][c] === 0) zeros++;
-                
-                if (zeros === 1) return { key: 'dot', matrix: SHAPES['dot'], fixed: true };
-                if (zeros === 2) {
-                    if(Math.random() > 0.3) return { key: 'bar2', matrix: rotateMatrix(SHAPES['bar2']), fixed: true }; // Vertical bar
-                }
-            }
-
-            // 2. If no obvious clear, give a piece that fits
-            const easyPool = ['dot', 'bar2', 'sq2', 'l2', 'bar3'];
-            let candidateKey = easyPool[Math.floor(Math.random() * easyPool.length)];
-            let candidateMatrix = SHAPES[candidateKey];
-
-            // Verify it fits at least somewhere in some rotation
-            if (canShapeFitAnywhere(candidateMatrix)) {
-                return { key: candidateKey, matrix: candidateMatrix, fixed: false };
-            }
-
-            // 3. Last Resort: Give a dot. Dots almost always fit unless board is 100% full.
             return { key: 'dot', matrix: SHAPES['dot'], fixed: true };
         }
 
-        // --- Hard Mode AI: "The Assassin" ---
+        function findGapShape() {
+            for(let r=0; r<BOARD_SIZE; r++) {
+                let zeros = 0;
+                for(let c=0; c<BOARD_SIZE; c++) if(grid[r][c] === 0) zeros++;
+                if(zeros === 1) return { key: 'dot', matrix: SHAPES['dot'], fixed: true };
+            }
+            return null;
+        }
+
+        // --- Hard Mode AI ---
         function getHardModeShape() {
-            // Phase 1: Random (0-39 moves)
-            if (moves < 40) {
-                const keys = Object.keys(SHAPES);
-                const k = keys[Math.floor(Math.random() * keys.length)];
+            const allKeys = Object.keys(SHAPES);
+
+            // Phase 1: Fairness (0-35 moves)
+            if (moves < 35) {
+                const k = allKeys[Math.floor(Math.random() * allKeys.length)];
+                // Return fixed=false to let spawnShapes randomize rotation like standard play
                 return { key: k, matrix: SHAPES[k], fixed: false };
             }
 
-            // Phase 2: High Difficulty (40-44 moves)
-            if (moves >= 40 && moves < 45) {
-                const hardPool = ['sq3', 'bar5', 'l3', 'z3', 's3'];
-                const k = hardPool[Math.floor(Math.random() * hardPool.length)];
+            // Phase 2: The Squeeze (35-49 moves)
+            if (moves >= 35 && moves < 50) {
+                const awkwardPool = ['l3', 'l3r', 'z3', 's3', 't3'];
+                const k = awkwardPool[Math.floor(Math.random() * awkwardPool.length)];
                 return { key: k, matrix: SHAPES[k], fixed: false };
             }
 
-            // Phase 3: The Kill Switch (45+ moves)
-            // Find a shape that DOES NOT fit.
-            const keys = Object.keys(SHAPES);
-            
-            // Try 10 times to find an impossible shape
-            for(let i=0; i<10; i++) {
-                const k = keys[Math.floor(Math.random() * keys.length)];
+            // Phase 3: The Wall (50+ moves)
+            // Explicitly search for IMPOSSIBLE shapes
+            for(let i=0; i<20; i++) {
+                const hardKeys = ['bar5', 'sq3', 'l3', 'bar4']; 
+                const k = hardKeys[Math.floor(Math.random() * hardKeys.length)];
                 let m = SHAPES[k];
-                // Random rotation for the check
                 const r = Math.floor(Math.random() * 4);
                 for(let j=0; j<r; j++) m = rotateMatrix(m);
 
                 if (!canShapeFitAnywhere(m)) {
-                    // Found a killer piece!
-                    return { key: k, matrix: m, fixed: true }; // Fixed so it stays in the impossible orientation
+                    return { key: k, matrix: m, fixed: true };
                 }
             }
 
-            // If board is too empty and everything fits, give the largest possible blocks to clog it up
-            const cloggers = ['sq3', 'bar5', 'bar4'];
-            const k = cloggers[Math.floor(Math.random() * cloggers.length)];
-            return { key: k, matrix: SHAPES[k], fixed: false };
+            // If empty board, spam big squares
+            return { key: 'sq3', matrix: SHAPES['sq3'], fixed: true };
         }
 
-
-        // --- Matrix & Validation Helpers ---
+        // --- Helpers ---
 
         function rotateMatrix(matrix) {
             const N = matrix.length;
@@ -420,12 +427,7 @@
         }
 
         function canShapeFitAnywhere(matrix) {
-            // We check THIS specific orientation (no auto-rotation check inside here)
-            // Used by Hard Mode to verify impossibility of a specific shape instance
-            // Used by Easy Mode with rotations manually handled
-            
-            // However, for general gameplay "Can I survive?", we usually check all rotations.
-            // But for spawning logic, we want to know if *this matrix* fits.
+            // Check specific matrix orientation
             for (let r = 0; r < BOARD_SIZE; r++) {
                 for (let c = 0; c < BOARD_SIZE; c++) {
                     if (checkFit(r, c, matrix)) return true;
@@ -434,14 +436,20 @@
             return false;
         }
 
-        // Used for Game Over detection (checks ALL rotations)
-        function canShapeFitAnyRotation(baseMatrix) {
-            let m = baseMatrix;
-            for(let i=0; i<4; i++) {
-                if (canShapeFitAnywhere(m)) return true;
-                m = rotateMatrix(m);
+        function checkFit(r, c, matrix) {
+            const h = matrix.length;
+            const w = matrix[0].length;
+            for (let i = 0; i < h; i++) {
+                for (let j = 0; j < w; j++) {
+                    if (matrix[i][j] === 1) {
+                        const boardR = r + i;
+                        const boardC = c + j;
+                        if (boardR < 0 || boardR >= BOARD_SIZE || boardC < 0 || boardC >= BOARD_SIZE) return false;
+                        if (grid[boardR][boardC] === 1) return false;
+                    }
+                }
             }
-            return false;
+            return true;
         }
 
         function createMiniGrid(matrix, key) {
@@ -450,7 +458,6 @@
             const gridDiv = document.createElement('div');
             gridDiv.className = 'mini-grid';
             gridDiv.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-            
             if (rows > 3 || cols > 3) gridDiv.style.transform = "scale(0.7)";
 
             for (let r = 0; r < rows; r++) {
@@ -468,7 +475,7 @@
             return gridDiv;
         }
 
-        // --- Interaction Handlers ---
+        // --- Drag & Drop ---
 
         let draggedShapeIdx = null;
         let ghostEl = null;
@@ -480,7 +487,6 @@
                 const touch = e.touches ? e.touches[0] : e;
                 draggedShapeIdx = index;
                 createGhost(index, touch.clientX, touch.clientY);
-                
                 document.addEventListener('mousemove', onMove, { passive: false });
                 document.addEventListener('touchmove', onMove, { passive: false });
                 document.addEventListener('mouseup', onEnd);
@@ -495,11 +501,9 @@
             if (ghostEl) ghostEl.remove();
             const shapeObj = currentShapes[index];
             const shapeMatrix = shapeObj.data;
-            
             ghostEl = document.createElement('div');
             ghostEl.className = 'dragging-ghost';
             ghostEl.style.gridTemplateColumns = `repeat(${shapeMatrix[0].length}, 1fr)`;
-            
             const boardCell = document.querySelector('.cell');
             const cellSize = boardCell.offsetWidth;
             const gap = 4;
@@ -519,7 +523,6 @@
                     ghostEl.appendChild(cell);
                 });
             });
-
             document.body.appendChild(ghostEl);
             updateGhostPos(x, y);
         }
@@ -581,22 +584,6 @@
             dockEl.style.opacity = dropped ? '0' : '1';
             if (dropped) dockEl.innerHTML = ''; 
             draggedShapeIdx = null;
-        }
-
-        function checkFit(r, c, matrix) {
-            const h = matrix.length;
-            const w = matrix[0].length;
-            for (let i = 0; i < h; i++) {
-                for (let j = 0; j < w; j++) {
-                    if (matrix[i][j] === 1) {
-                        const boardR = r + i;
-                        const boardC = c + j;
-                        if (boardR < 0 || boardR >= BOARD_SIZE || boardC < 0 || boardC >= BOARD_SIZE) return false;
-                        if (grid[boardR][boardC] === 1) return false;
-                    }
-                }
-            }
-            return true;
         }
 
         function previewShape(r, c, matrix, isValid) {
@@ -717,14 +704,14 @@
             document.getElementById('moves-display').innerText = moves;
         }
 
-        // Game Over Check: Checks ALL rotations of available shapes
+        // FIXED Game Over: Checks only specific orientation
         function checkGameOverState() {
             const availableShapes = currentShapes.filter(s => !s.used);
             if (availableShapes.length === 0) return;
 
             let canMove = false;
             for (let s of availableShapes) {
-                if (canShapeFitAnyRotation(s.data)) {
+                if (canShapeFitAnywhere(s.data)) { // Check EXACT shape provided
                     canMove = true;
                     break;
                 }
